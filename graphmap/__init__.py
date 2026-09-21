@@ -14,7 +14,7 @@ graphmap - 3D 点云语义地图构建工具库
 """
 
 # encoding
-from .encoding import (
+from .graphmap.encoding import (
     pack_rgba,
     unpack_rgba,
     pack_rgba_batch,
@@ -38,17 +38,17 @@ from .encoding import (
     )
 
 # pose
-from .pose import Pose
+from .graphmap.pose import Pose
 
 # infopoints
-from .infopoints import InfoPoints, COL_LAYOUT, NUM_COLS
+from .graphmap.infopoints import InfoPoints, COL_LAYOUT, NUM_COLS
 
 # index_db
-from .index_db import IndexDB, point_keys_from_xyz, unpack_point_keys
+from .graphmap.index_db import IndexDB, point_keys_from_xyz, unpack_point_keys
 
 # map2d
-from .map2d import Map2D
-from .topdown_map2d import (
+from .graphmap.map2d import Map2D
+from .graphmap.topdown_map2d import (
     HABITAT_NAVIGATION_LAYER,
     HABITAT_COLOR_LAYER,
     ONLINE_OCCUPANCY_LAYER,
@@ -57,14 +57,14 @@ from .topdown_map2d import (
 )
 
 # sensor
-from .sensor import (
+from .graphmap.sensor import (
     CameraIntrinsic,
     SensorBridge,
     load_observation_from_json,
     )
 
 # visibility
-from .visibility import (
+from .graphmap.visibility import (
     compute_frustum_planes,
     are_points_in_frustum,
     frustum_culling,
@@ -72,7 +72,7 @@ from .visibility import (
     )
 
 # environment
-from .environment import Environment
+from .graphmap.environment import Environment
 
 __all__ = [
     # encoding
