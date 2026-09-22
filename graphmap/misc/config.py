@@ -1,4 +1,3 @@
-import yaml
 from pathlib import Path
 from typing import Union, Literal
 
@@ -30,13 +29,19 @@ except ImportError:
 
 
 def load_config(config_fp: Union[str, Path]):
+    import yaml
     config_fp = Path(config_fp)
     assert config_fp.exists() and config_fp.is_file(), f"Config file {config_fp} not found."
     assert config_fp.suffix in ['.yaml', '.yml'], f"Config file {config_fp} must be a .yaml or .yml file."
     with open(config_fp, 'r') as f:
         config = Munch.fromDict(yaml.safe_load(f))
     if "__base__" in config:
-        base_config = load_config(config.__base__)
+        base_path = Path(config.__base__)
+        # Retain existing CWD-relative configurations, while allowing a file
+        # to travel with a sibling base file when loaded from another CWD.
+        if not base_path.is_absolute() and not base_path.is_file():
+            base_path = config_fp.parent / base_path
+        base_config = load_config(base_path)
         config = merge_config(config, base_config)
     return config
 
@@ -50,5 +55,23 @@ def merge_config(config: Munch, base_config: Munch):
             merged_config[k] = merge_config(v, merged_config[k])
         else:
             merged_config[k] = v
-            print(k, v)
     return merged_config
+
+
+def default_config(*, resolution: float = 0.05, side_length: float = 100.0) -> Munch:
+    """Minimal mapping configuration; visibility angles retain legacy degrees."""
+    return Munch.fromDict({
+        "sensor_params": {
+            "fov_ref": "default_sensor",
+            "default_sensor": {
+                "hfov": 90.0, "vfov": 60.0,
+                "min_range": 0.0, "max_range": 100.0,
+                "near": 0.0, "far": 100.0,
+            },
+        },
+        "map": {
+            "resolution": resolution, "side_length": side_length,
+            "clip_z": [0.1, 2.0], "under_floor_height": -0.2,
+        },
+        "environment": {"enable_history": False, "history_length": 1},
+    })

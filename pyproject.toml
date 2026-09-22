@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "graphmap"
+version = "0.1.0"
+description = "Geometry, sensor conversion and point-cloud mapping in a shared coordinate convention"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = ["numpy>=1.26.4", "scipy>=1.17"]
+
+[project.optional-dependencies]
+mapping = ["opencv-python>=4.8"]
+config = ["PyYAML>=6", "munch>=4"]
+dev = ["pytest>=8", "nbformat>=5", "nbclient>=0.10", "ipykernel>=6"]
+
+[tool.setuptools.packages.find]
+include = ["graphmap*"]
+
+[tool.setuptools.package-data]
+"graphmap.pose" = ["*.md"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["dataset: optional local HM3D integration (GRAPHMAP_HM3D_ROOT)"]

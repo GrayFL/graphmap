@@ -3,3 +3,8 @@
 __pycache__/
 .*
 !.gitignore
+*.egg-info/
+build/
+dist/
+examples/assets/
+examples/outputs/

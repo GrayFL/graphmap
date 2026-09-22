@@ -33,8 +33,8 @@ def point_keys_from_xyz(
     Key layout, from high to low bits:
         x:int16 | y:int16 | z:int16 | legacy_hi16
     """
-    if resolution <= 0:
-        raise ValueError("resolution must be positive")
+    if not np.isfinite(resolution) or resolution <= 0:
+        raise ValueError("resolution must be finite and positive")
 
     xyz = np.asarray(xyz, dtype=np.float64)
     if xyz.ndim == 1:
@@ -42,7 +42,9 @@ def point_keys_from_xyz(
     if xyz.ndim != 2 or xyz.shape[1] != 3:
         raise ValueError(f"xyz must have shape (N, 3), got {xyz.shape}")
 
-    coords = np.rint(xyz / float(resolution)).astype(np.int64)
+    if not np.all(np.isfinite(xyz)):
+        raise ValueError("xyz must contain only finite coordinates")
+    coords = np.rint(xyz / float(resolution))
     if np.any(coords < INT16_MIN) or np.any(coords > INT16_MAX):
         bad = coords[
             np.any((coords < INT16_MIN) | (coords > INT16_MAX), axis=1)

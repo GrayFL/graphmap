@@ -184,7 +184,10 @@ class InfoPoints:
 
     def __getitem__(self, key) -> "InfoPoints":
         """支持整数索引、切片、布尔/整数数组索引。"""
-        return InfoPoints(self._data[key], _safe=True)
+        data = self._data[key]
+        if data.ndim == 1:
+            data = data.reshape(1, NUM_COLS)
+        return InfoPoints(data, _safe=True, metadata=self._metadata.copy())
 
     def __len__(self) -> int:
         return self.N
@@ -237,7 +240,7 @@ class InfoPoints:
     # ── 合并与去重 ────────────────────────────────────────────────────
 
     def concat(self, other: "InfoPoints") -> "InfoPoints":
-        """返回两个 InfoPoints 的拼接（不重复）。"""
+        """返回两个 InfoPoints 的拼接；去重需另行调用 deduplicate。"""
         if other.N == 0:
             return InfoPoints(self._data.copy(), _safe=True)
         if self.N == 0:
@@ -308,9 +311,12 @@ class InfoPoints:
     def load(cls, path: Union[str, Path]) -> "InfoPoints":
         """从 .npz 文件加载。"""
         path = Path(path)
-        with np.load(path) as loaded:
+        # Legacy metadata is an object scalar. Load trusted snapshots only,
+        # as with IndexDB's pickle format.
+        with np.load(path, allow_pickle=True) as loaded:
+            metadata = loaded["metadata"].item() if "metadata" in loaded else {}
             return cls(
-                loaded["data"], _safe=True, metadata=loaded["metadata"]
+                loaded["data"], _safe=True, metadata=metadata
                 )
 
     # ── 实用方法 ──────────────────────────────────────────────────────
@@ -318,7 +324,7 @@ class InfoPoints:
     def copy(self) -> "InfoPoints":
         """返回完整拷贝。"""
         return InfoPoints(
-            self._data.copy(), _safe=True, metadata=self._metadata
+            self._data.copy(), _safe=True, metadata=self._metadata.copy()
             )
 
     def __repr__(self) -> str:

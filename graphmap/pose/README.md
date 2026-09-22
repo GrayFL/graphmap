@@ -1,6 +1,8 @@
 # Pose v3 使用说明
 
-`pose.py` 提供统一的单个位姿、批量位姿和相似变换接口：
+安装 graphmap 的方式见 [总 README](../../README.md#安装与环境)。其他项目可直接通过 `from graphmap.pose import Pose, PoseArray` 使用本模块，本文集中说明位姿与变换接口。
+
+`graphmap.pose` 提供统一的单个位姿、批量位姿和相似变换接口：
 
 - `Pose`：单个 SE(3) 位姿；当 `scale != 1` 时也可表示方向保持的 Sim(3) 变换。
 - `PoseArray`：具有 NumPy 广播语义的 N 维位姿数组。
@@ -11,7 +13,7 @@
 依赖：
 
 ```bash
-pip install numpy scipy
+pip install 'numpy>=1.26.4' 'scipy>=1.17'
 ```
 
 ## 1. 约定
@@ -37,7 +39,7 @@ T_world_camera: camera -> world
 长度为 3 的 `rotation` 默认按角度制欧拉角解析：
 
 ```python
-from pose import Pose
+from graphmap.pose import Pose
 
 T_world_camera = Pose(
     translation=[1.0, 2.0, 3.0],
@@ -70,7 +72,7 @@ T = Pose(rotation=[0.0, 0.0, 1.57], rotation_type="rotvec")
 ```python
 import numpy as np
 from scipy.spatial.transform import Rotation as R
-from pose import Pose
+from graphmap.pose import Pose
 
 T_matrix = Pose(rotation=np.eye(3))
 T_quat = Pose(rotation=[0.0, 0.0, 0.0, 1.0])
@@ -91,7 +93,7 @@ T2 = Pose.from_matrix(T_world_camera.matrix)
 
 ```python
 import numpy as np
-from pose import PoseArray
+from graphmap.pose import PoseArray
 
 positions = np.array([
     [0.0, 0.0, 0.0],
@@ -216,7 +218,7 @@ relative = T_world_camera / T_world_lidar
 `Transform` 与 `Pose` 是同一个类，只是名称更适合作为操作符：
 
 ```python
-from pose import Transform
+from graphmap.pose import Transform
 
 G = Transform(
     translation=[1.0, 0.0, 0.0],

@@ -1,126 +1,70 @@
-"""
-graphmap - 3D 点云语义地图构建工具库
+"""Point-cloud geometry and mapping, with optional components imported on demand."""
+from importlib import import_module
 
-提供基于 InfoPoints 的环境管理、编解码、可见性判定、2D 可行地图等功能。
+__version__ = "0.1.0"
 
-核心组件:
-    - InfoPoints: (N, 6) float32 紧凑存储的 3D 点云
-    - IndexDB:    以 uint64 point key 为键的命名附加信息表
-    - Environment: 环境管理器，维护全局地图并处理增量更新
-    - Map2D:       2D 可行地图（遍历性栅格）
-    - Pose:        6-DoF 位姿
-    - encoding:    编解码工具
-    - visibility:  可见性判定（视锥体裁剪、遮挡检测）
-"""
+_EXPORTS = {
+    'pack_rgba': '.encoding',
+    'unpack_rgba': '.encoding',
+    'pack_rgba_batch': '.encoding',
+    'unpack_rgba_batch': '.encoding',
+    'pack_timestamp': '.encoding',
+    'unpack_timestamp': '.encoding',
+    'pack_timestamp_batch': '.encoding',
+    'unpack_timestamp_batch': '.encoding',
+    'pack_index': '.encoding',
+    'unpack_index': '.encoding',
+    'pack_index_batch': '.encoding',
+    'unpack_index_batch': '.encoding',
+    'encode_4int8_to_1float32': '.encoding',
+    'decode_1float32_to_4int8': '.encoding',
+    'encode_4uint8_to_1float32': '.encoding',
+    'decode_1float32_to_4uint8': '.encoding',
+    'encode_int32_to_float32': '.encoding',
+    'decode_float32_to_int32': '.encoding',
+    'encode_uint32_to_float32': '.encoding',
+    'decode_float32_to_uint32': '.encoding',
+    'Pose': '.pose',
+    'InfoPoints': '.infopoints',
+    'COL_LAYOUT': '.infopoints',
+    'NUM_COLS': '.infopoints',
+    'IndexDB': '.index_db',
+    'point_keys_from_xyz': '.index_db',
+    'unpack_point_keys': '.index_db',
+    'Map2D': '.map2d',
+    'HABITAT_NAVIGATION_LAYER': '.topdown_map2d',
+    'HABITAT_COLOR_LAYER': '.topdown_map2d',
+    'ONLINE_OCCUPANCY_LAYER': '.topdown_map2d',
+    'TOPDOWN_NUM_LAYERS': '.topdown_map2d',
+    'TopdownMap2D': '.topdown_map2d',
+    'CameraIntrinsic': '.sensor',
+    'SensorBridge': '.sensor',
+    'load_observation_from_json': '.sensor',
+    'compute_frustum_planes': '.visibility',
+    'are_points_in_frustum': '.visibility',
+    'frustum_culling': '.visibility',
+    'frustum_xy_bounds': '.visibility',
+    'Environment': '.environment',
+    'PoseArray': '.pose',
+    'PoseLike': '.pose',
+    'Transform': '.pose',
+    'TransformArray': '.pose',
+    'Sim3': '.pose',
+    'Sim3Array': '.pose',
+    'Similarity3': '.pose',
+    'Similarity3Array': '.pose',
+    'parse_pose_label': '.pose',
+    'RayDirLUTEstimator': '.sensor',
+    'sample_hw_data': '.sensor',
+}
+__all__ = list(_EXPORTS)
 
-# encoding
-from .graphmap.encoding import (
-    pack_rgba,
-    unpack_rgba,
-    pack_rgba_batch,
-    unpack_rgba_batch,
-    pack_timestamp,
-    unpack_timestamp,
-    pack_timestamp_batch,
-    unpack_timestamp_batch,
-    pack_index,
-    unpack_index,
-    pack_index_batch,
-    unpack_index_batch,
-    encode_4int8_to_1float32,
-    decode_1float32_to_4int8,
-    encode_4uint8_to_1float32,
-    decode_1float32_to_4uint8,
-    encode_int32_to_float32,
-    decode_float32_to_int32,
-    encode_uint32_to_float32,
-    decode_float32_to_uint32,
-    )
 
-# pose
-from .graphmap.pose import Pose
+def __getattr__(name):
+    if name not in _EXPORTS:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    return getattr(import_module(_EXPORTS[name], __name__), name)
 
-# infopoints
-from .graphmap.infopoints import InfoPoints, COL_LAYOUT, NUM_COLS
 
-# index_db
-from .graphmap.index_db import IndexDB, point_keys_from_xyz, unpack_point_keys
-
-# map2d
-from .graphmap.map2d import Map2D
-from .graphmap.topdown_map2d import (
-    HABITAT_NAVIGATION_LAYER,
-    HABITAT_COLOR_LAYER,
-    ONLINE_OCCUPANCY_LAYER,
-    TOPDOWN_NUM_LAYERS,
-    TopdownMap2D,
-)
-
-# sensor
-from .graphmap.sensor import (
-    CameraIntrinsic,
-    SensorBridge,
-    load_observation_from_json,
-    )
-
-# visibility
-from .graphmap.visibility import (
-    compute_frustum_planes,
-    are_points_in_frustum,
-    frustum_culling,
-    frustum_xy_bounds
-    )
-
-# environment
-from .graphmap.environment import Environment
-
-__all__ = [
-    # encoding
-    "pack_rgba",
-    "unpack_rgba",
-    "pack_rgba_batch",
-    "unpack_rgba_batch",
-    "pack_timestamp",
-    "unpack_timestamp",
-    "pack_timestamp_batch",
-    "unpack_timestamp_batch",
-    "pack_index",
-    "unpack_index",
-    "pack_index_batch",
-    "unpack_index_batch",
-    "encode_4int8_to_1float32",
-    "decode_1float32_to_4int8",
-    "encode_4uint8_to_1float32",
-    "decode_1float32_to_4uint8",
-    "encode_int32_to_float32",
-    "decode_float32_to_int32",
-    "encode_uint32_to_float32",
-    "decode_float32_to_uint32",  # pose
-    "Pose",  # infopoints
-    "InfoPoints",
-    "COL_LAYOUT",
-    "NUM_COLS",  # index_db
-    "IndexDB",
-    "point_keys_from_xyz",
-    "unpack_point_keys",  # map2d
-    "Map2D",
-    "TopdownMap2D",
-    "HABITAT_NAVIGATION_LAYER",
-    "HABITAT_COLOR_LAYER",
-    "ONLINE_OCCUPANCY_LAYER",
-    "TOPDOWN_NUM_LAYERS",  # sensor
-    "CameraIntrinsic",
-    "SensorBridge",
-    "load_observation_from_json",
-    "compute_frustum_planes",
-    "are_points_in_frustum",
-    "frustum_culling",
-    "frustum_xy_bounds",
-    "project_lidar_bins",
-    "dilate_finite_max",
-    "lidar_depth_radius_values",
-    "lidar_depth_dilation_radii",
-    "dilate_finite_max_adaptive",
-    "lookup_finite_max_adaptive",  # environment
-    "Environment",
-    ]
+def __dir__():
+    return sorted(set(globals()) | set(__all__))

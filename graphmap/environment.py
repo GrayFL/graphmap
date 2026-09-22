@@ -17,8 +17,7 @@ import numpy as np
 
 from .index_db import IndexDB, point_keys_from_xyz
 from .infopoints import InfoPoints
-from .map2d import Map2D
-from .misc.config import Munch
+from .misc.config import Munch, default_config
 from .pose import Pose
 from .visibility import (
     compute_visible_empty_removal_mask,
@@ -37,11 +36,15 @@ class Environment:
 
     def __init__(
         self,
-        config: Munch,
+        config: Optional[Munch] = None,
         enable_2d_map: bool = False,
         enable_history: bool = False,
+        *,
+        resolution: float = 0.05,
+        side_length: float = 100.0,
         ):
-        self.config = config
+        self.config = (default_config(resolution=resolution, side_length=side_length)
+                       if config is None else Munch.fromDict(config))
 
         self.infopoints = InfoPoints()
         self.index_dbs: Dict[str, IndexDB] = {}
@@ -59,9 +62,14 @@ class Environment:
         self.near = fov_cfg.near or 0.0
         self.far = fov_cfg.far or 100.0
         self.resolution = float(self.config.map.resolution)
+        if not np.isfinite(self.resolution) or self.resolution <= 0:
+            raise ValueError("map resolution must be finite and positive")
 
         self.enable_2d_map = enable_2d_map
-        self.map2d = Map2D(config=self.config) if enable_2d_map else None
+        self.map2d = None
+        if enable_2d_map:
+            from .map2d import Map2D
+            self.map2d = Map2D(config=self.config)
 
         history_enabled = bool(
             enable_history or self.config.environment.enable_history
@@ -431,7 +439,9 @@ class Environment:
                 )
 
         if map2d_path.exists():
+            from .map2d import Map2D
             instance.map2d = Map2D.load(map2d_path)
+            instance.map2d.config = instance.config
 
         instance._frame_count = int(
             _metadata_value(meta, "frame_count", 0)
@@ -467,10 +477,10 @@ class Environment:
         mask = frustum_culling(
             self.infopoints.xyz,
             pose,
-            fov_h=fov_h or self.fov_h,
-            fov_v=fov_v or self.fov_v,
-            near=near or self.near,
-            far=far or self.far,
+            fov_h=self.fov_h if fov_h is None else fov_h,
+            fov_v=self.fov_v if fov_v is None else fov_v,
+            near=self.near if near is None else near,
+            far=self.far if far is None else far,
             )
         return self.infopoints.filter_by_mask(mask)
 

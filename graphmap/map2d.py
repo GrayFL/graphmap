@@ -42,11 +42,11 @@ class Map2D:
         side_length : float
             地图总边长，单位：米（正方形地图）
         shape : tuple, optional
-            显式栅格尺寸 (W, H)。提供后允许矩形地图。
+            显式栅格尺寸 (H, W)。提供后允许矩形地图。
         num_layers : int
             地图层数（默认 1）
         origin : tuple, optional
-            世界原点对应的栅格坐标 (col, row)，默认为地图中心
+            世界原点对应的栅格坐标 (h, w) / (x_index, y_index)，默认为地图中心
         """
         self.config = config
         map_config = getattr(config, "map", None)
@@ -72,7 +72,7 @@ class Map2D:
             h = w
         else:
             if len(shape) != 2:
-                raise ValueError("shape must contain (width, height)")
+                raise ValueError("shape must contain (height, width)")
             w, h = (int(shape[0]), int(shape[1]))
             if w <= 0 or h <= 0:
                 raise ValueError("shape dimensions must be positive")
@@ -87,17 +87,17 @@ class Map2D:
 
     @property
     def grid(self) -> np.ndarray:
-        """shape (W, H, L) 栅格数组。"""
+        """shape (H, W, L) 栅格数组。"""
         return self._grid
 
     @property
     def shape(self) -> Tuple[int, int, int]:
-        """(W, H, L)。"""
+        """(H, W, L)。"""
         return self._grid.shape
 
     @property
     def origin(self) -> np.ndarray:
-        """世界原点在栅格中的坐标 (col, row)。"""
+        """世界原点在栅格中的坐标 (h, w) / (x_index, y_index)。"""
         return self._origin
 
     # ── 坐标转换 ──────────────────────────────────────────────────────
@@ -114,7 +114,7 @@ class Map2D:
         Returns
         -------
         np.ndarray
-            shape (N, 2) 或 (2,) int32 栅格索引 [col, row]
+            shape (N, 2) 或 (2,) int32 栅格索引 [h, w] = [x_index, y_index]
         """
         coords = np.asarray(coords, dtype=np.float64)
         is_1d = coords.ndim == 1
@@ -134,7 +134,7 @@ class Map2D:
         Parameters
         ----------
         indices : np.ndarray
-            shape (N, 2) 或 (2,) int32 [col, row]
+            shape (N, 2) 或 (2,) int32 [h, w] = [x_index, y_index]
 
         Returns
         -------
@@ -189,18 +189,17 @@ class Map2D:
         tmp = []
         for i, item in enumerate(seq):
             if isinstance(item, slice):
-                start = item.start or 0.0
-                stop = item.stop or 0.0
-                step = item.step or self.resolution
-                g_start = int(
-                    np.round(start / self.resolution + self._origin[i])
+                g_start = None if item.start is None else int(
+                    np.round(item.start / self.resolution + self._origin[i])
                     )
-                g_stop = int(
-                    np.round(stop / self.resolution + self._origin[i])
+                g_stop = None if item.stop is None else int(
+                    np.round(item.stop / self.resolution + self._origin[i])
                     )
                 g_step = None if item.step is None else int(
-                    np.round(step / self.resolution)
+                    np.round(item.step / self.resolution)
                     )
+                if g_step == 0:
+                    raise ValueError("slice step must span at least one grid cell")
                 tmp.append(slice(g_start, g_stop, g_step))
             else:
                 idx = np.asarray(item)
@@ -259,7 +258,8 @@ class Map2D:
 
     def update_from_occupancy(self, points: np.ndarray, layer: int = 0):
         """
-        从 3D 点云 (x,y,z) 更新 2D 占用地图。z 高于阈值的点标记为占用 (=0)。
+        从 3D 点云 (x,y,z) 更新占用地图 (=0)。默认投影所有点；
+        若 config.agent 提供 collision_height_min/max，则按其高度区间筛选。
 
         Parameters
         ----------
@@ -268,8 +268,9 @@ class Map2D:
         layer : int
             图层索引
         """
-        collision_height_min = self.config.agent.collision_height_min
-        collision_height_max = self.config.agent.collision_height_max
+        agent_config = getattr(self.config, "agent", None)
+        collision_height_min = getattr(agent_config, "collision_height_min", -np.inf)
+        collision_height_max = getattr(agent_config, "collision_height_max", np.inf)
         obstacle = ((points[:, 2] > collision_height_min) &
                     (points[:, 2] < collision_height_max))
         obstacle_pts = points[obstacle]
