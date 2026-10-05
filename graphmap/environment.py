@@ -66,6 +66,7 @@ class Environment:
             raise ValueError("map resolution must be finite and positive")
 
         self.enable_2d_map = enable_2d_map
+        self._map2d_update_from_points = True
         self.map2d = None
         if enable_2d_map:
             from .map2d import Map2D
@@ -259,6 +260,40 @@ class Environment:
             return [default for _ in range(len(keys))]
         return db.get_batch(keys, default=default)
 
+    def set_point_attributes(self, attributes: Mapping[str, Any]):
+        """Replace derived tables aligned with the CURRENT fused cloud rows.
+
+        Unlike observe(extra_keys=...), keys here are already global voxel keys.
+        Recompute full-cloud properties such as ground confidence after geometry
+        or connectivity changes, including previously observed points. Other
+        tables (e.g. semantic IDs) are preserved. Validation precedes mutation.
+        """
+        keys = self.point_keys()
+        replacement = {}
+        for name, values in attributes.items():
+            if not isinstance(name, str) or not name or name in {".", ".."} or "/" in name or "\\" in name:
+                raise ValueError("attribute names must be nonempty file-safe table names")
+            if len(values) != self.N:
+                raise ValueError(f"attributes[{name!r}] must align with all {self.N} map points")
+            table = IndexDB(name)
+            for key, value in zip(keys, values):
+                table.put(int(key), value.item() if isinstance(value, np.generic) else value)
+            replacement[name] = table
+        self.index_dbs.update(replacement)
+
+    def set_map2d(self, map2d, *, update_from_points=False):
+        """Attach a derived grid without legacy occupancy updates overwriting it.
+
+        ``update_from_points=True`` opts into the original raw point projection.
+        This policy is saved with the environment and restored on load.
+        """
+        from .map2d import Map2D
+        if map2d is not None and not isinstance(map2d, Map2D):
+            raise TypeError("map2d must be Map2D or None")
+        self.map2d = map2d
+        self.enable_2d_map = map2d is not None
+        self._map2d_update_from_points = bool(update_from_points)
+
     # ── Internal helpers ──────────────────────────────────────────────
 
     def _timestamps_for_observation(
@@ -356,7 +391,7 @@ class Environment:
         return tables
 
     def _update_2d_map(self, points_world: np.ndarray):
-        if self.map2d is not None:
+        if self.map2d is not None and self._map2d_update_from_points:
             self.map2d.update_from_occupancy(points_world, layer=0)
 
     # ── Properties ────────────────────────────────────────────────────
@@ -386,6 +421,7 @@ class Environment:
             self.map2d.save(dir_path / "map2d.npz")
 
         metadata = {
+            "map2d_update_from_points": self._map2d_update_from_points,
             "resolution_3d":
                 self.resolution,
             "fov_h":
@@ -442,6 +478,9 @@ class Environment:
             from .map2d import Map2D
             instance.map2d = Map2D.load(map2d_path)
             instance.map2d.config = instance.config
+
+        instance._map2d_update_from_points = bool(
+            _metadata_value(meta, "map2d_update_from_points", True))
 
         instance._frame_count = int(
             _metadata_value(meta, "frame_count", 0)

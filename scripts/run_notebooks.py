@@ -13,15 +13,17 @@ from jupyter_client.kernelspec import KernelSpecManager
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--with-hm3d", action="store_true", help="include the local dataset example")
+    parser.add_argument("--with-hm3d", action="store_true", help="include the local dataset examples")
+    parser.add_argument("--notebook", help="select an example by filename or glob, e.g. '04_*.ipynb'")
     parser.add_argument("--output-dir", type=Path, help="keep executed notebooks in this directory")
     args = parser.parse_args()
     examples = Path(__file__).resolve().parents[1] / "examples"
-    paths = sorted(examples.glob("*.ipynb"))
+    paths = sorted(examples.glob(args.notebook or "*.ipynb"))
+    paths = [path for path in paths if path.is_file() and path.suffix == ".ipynb"]
     if not args.with_hm3d:
-        paths = [path for path in paths if not path.name.startswith("03_")]
+        paths = [path for path in paths if "hm3d" not in path.stem.lower()]
     if not paths:
-        raise FileNotFoundError(f"No notebooks found in {examples}")
+        parser.error(f"No matching notebooks in {examples}; HM3D examples require --with-hm3d")
     with tempfile.TemporaryDirectory(prefix="graphmap-notebooks-") as directory:
         temporary = Path(directory)
         kernel_dir = temporary / "kernels" / "graphmap-test"
