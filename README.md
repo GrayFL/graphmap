@@ -2,19 +2,13 @@
 
 用于机器人点云处理与建图的 Python 工具库。可以单独使用位姿、坐标转换、相机内参、图像采样，也可以组合成 RGB-D / RGB + LiDAR → 带颜色及语义的全局点云 → 二维栅格的流程。
 
-开发前先读 [PROJECT.md](PROJECT.md)。
+本地开发环境、验证日志和 agent 上下文记录在不提交的 `PROJECT.md`。
 
 **仅使用 Pose：** 其他项目需要位姿、外参或批量变换时，可直接阅读 [Pose 使用说明](graphmap/pose/README.md)，通过 `from graphmap.pose import Pose, PoseArray` 调用。
 
 ## 安装与环境
 
-推荐本机 AIO：`/gray/LAB/envs/AIO/bin/python`。该环境已有 `.pth` 配置，在仓库外也能 `import graphmap`，无需修改环境。验证实际加载位置：
-
-```bash
-/gray/LAB/envs/AIO/bin/python -c 'import graphmap; print(graphmap.__file__)'
-```
-
-其他环境可在仓库根目录安装：
+在仓库根目录使用目标 Python 环境安装：
 
 ```bash
 python -m pip install -e .                      # 几何、相机、3D 点云及语义地图
@@ -23,9 +17,9 @@ python -m pip install -e '.[mapping,config,dev]' # 加二维地图、YAML、测�
 
 Python ≥ 3.11，NumPy ≥ 1.26.4，SciPy ≥ 1.17。`PoseArray` 使用 SciPy 1.17 引入的 N 维 Rotation 广播能力，不能只依据单个 `Pose` 能运行就降级 SciPy。[SciPy 发布说明](https://docs.scipy.org/doc/scipy/release/1.17.0-notes.html)
 
-OpenCV 用于二维地图；YAML 按需加载。单独导入 `graphmap.pose` 不会加载地图、OpenCV 或绘图库。Notebook 绘图需要本地 `scipykit`，AIO 已提供，库本身不依赖它。
+OpenCV 用于二维地图；YAML 按需加载。单独导入 `graphmap.pose` 不会加载地图、OpenCV 或绘图库。Notebook 绘图需要可选的 `scipykit`，库本身不依赖它。
 
-HM3D 数据读取使用本地 [dataset_wrapper](../dataset_wrapper/README.md)，AIO 已配置该库。其他环境需安装包含 `HM3D(load_replay=True)` 的本地版本；FNAV 回放日志中的 SciPy/Munch 对象由其 `hm3d` extra 提供依赖：
+HM3D 数据示例使用独立的 `dataset_wrapper` 项目。需要安装包含 `HM3D(load_replay=True)` 的版本；FNAV 回放日志中的 SciPy/Munch 对象由其 `hm3d` extra 提供依赖，例如在相邻源码仓库安装：
 
 ```bash
 python -m pip install -e '../dataset_wrapper[hm3d]'
@@ -48,6 +42,8 @@ dataset_wrapper 是数据示例的可选依赖；graphmap 的几何、数组适�
 | 时间 | `observe(timestamp=...)` 接收会话内相对秒，内部为 int32 毫秒；不要直接传 Unix 秒 |
 
 图像的 `h,w` 是像素行列，地图的 `h,w` 是世界 `x,y` 的栅格索引，两者不应混为同一三维坐标系。
+
+RSim 或其他运行时在调用边界以 `(stamp_ns - origin_ns) / 1e9` 转换数据源时间；应先做整数减法再转秒。reset/seek 后为新的 episode 创建独立 `Environment`，不要把回退后的时间混入旧地图。`observe` 会拒绝非有限时间及超出 int32 毫秒范围的时间，保留已有的向零截断毫秒语义。graphmap 不依赖 RSim、pyrobo 或 MuJoCo，也不管理运行时的时钟和命令期限。
 
 ## 1. 位姿、外参与批量点云
 
@@ -179,6 +175,8 @@ restored = Environment.load("outputs/demo_map")
 
 保存点云、命名属性表、可选二维地图和地图配置元数据。当前不保存机器人最新位姿、历史队列和完整外部配置。快照包含 pickle/NumPy object 元数据，只加载可信文件。
 
+`Environment` 是可变领域对象，不提供并发写入或运行时 revision 协议。跨线程传递点云时由调用方先取 `env.infopoints.copy()`；二维网格使用 `env.map2d.grid.copy()`，同时保留 resolution/origin 等元数据。调用方在地图版本变化时重建导航缓存，避免把活动数组当作不可变快照。
+
 ### 地面支撑与导航置信度
 
 `Environment` 默认的占用投影仍保持兼容。需要判断空洞、台阶、缓坡和跨高度连通性时，使用独立的 `GroundMap`：
@@ -236,7 +234,7 @@ from graphmap.adapters import rgbd_observation
 from graphmap.environment import Environment
 import numpy as np
 
-ds = HM3D("/R/Datasets/3DGS/hm3dv2", episodes=["0000"],
+ds = HM3D("path/to/hm3dv2", episodes=["0000"],
           frame_limit=3, load_replay=True)
 camera = CameraIntrinsic.from_sensor(width=640, height=640,
                                      hfov=np.deg2rad(64), vfov=np.deg2rad(64))
@@ -274,19 +272,19 @@ with ds.loader(num_workers=2, batch_size=None, prefetch=2) as samples:
 | [04_hm3dv2_rgbd_mapping.ipynb](examples/04_hm3dv2_rgbd_mapping.ipynb) | 完整轨迹采样、RGB-D/语义融合、二维占用、留出帧距离统计及保存加载验证 |
 | [05_hm3dv2_ground_navigation.ipynb](examples/05_hm3dv2_ground_navigation.ipynb) | 足迹支撑、盲区置信度、空洞/楼梯/多级地面、两段 HM3D 回放、三维属性和路线验证 |
 
-选择 AIO 内核，从第一个单元格开始运行。所有绘图使用 `from scipykit.task.cv import *`，参考 [scipykit 本地 README](/gray/Storage/MyPyLib/scipykit/README.md) 以及 [mtp_initializer 绘图约定](/gray/Storage/MyPyLib/scipykit/mtp_initializer/README.md)。第三个示例默认读取 `/R/Datasets/3DGS/hm3dv2/0000`，可通过 `GRAPHMAP_HM3D_ROOT`、`GRAPHMAP_HM3D_SCENE` 修改；`GRAPHMAP_HM3D_MODE=direct|prefetch|memory` 选择读取方式，默认 `prefetch`，`GRAPHMAP_HM3D_WORKERS` 默认 2。更换数据版本时需要核实 notebook 中明确列出的标定与导出约定。
+选择已安装所需依赖的 Python 内核，从第一个单元格开始运行。所有绘图使用 `from scipykit.task.cv import *`，绘图约定见所用 scipykit 版本的文档。运行第三个示例前通过 `GRAPHMAP_HM3D_ROOT` 设置数据集根目录，`GRAPHMAP_HM3D_SCENE` 选择场景；`GRAPHMAP_HM3D_MODE=direct|prefetch|memory` 选择读取方式，默认 `prefetch`，`GRAPHMAP_HM3D_WORKERS` 默认 2。更换数据版本时需要核实 notebook 中明确列出的标定与导出约定。
 
 第四个示例默认沿场景 `0000` 完整轨迹均匀选择 120 帧，其中 108 帧建图、12 帧留出检查；像素步长 8，体素边长 0.05 m。通过 `GRAPHMAP_HM3D_FRAMES`、`GRAPHMAP_HM3D_STRIDE`、`GRAPHMAP_HM3D_RESOLUTION` 调整规模，`GRAPHMAP_HM3D_WORKERS=0` 使用同步读取。它按 `mfigure → add_axes → label_axes → disp(fig, name) → plt.close` 绘图，并将图片、CSV、JSON 指标与地图快照存入 `examples/outputs/hm3dv2_mapping/<scene>/<run>/`。实验使用回放位姿，检验地图融合与观测一致性；不估计位姿，留出帧最近邻距离也不是独立真值重建精度。
 
 第五个示例默认使用 `0000,0001` 两个 episode，各选择 120 帧，每十帧评估一次导航图；目录编号不代表独立物理场景。`GRAPHMAP_GROUND_SCENES`、`GRAPHMAP_GROUND_FRAMES` 可调整，另沿用 HM3D 的 ROOT/STRIDE/WORKERS。原回放轨迹可能放不下 0.8 m 机器人，失败检查点会保留；最终参考位姿从已检查位置中选择，并非声称整条原轨迹可行。输出位于 `examples/outputs/ground_navigation/<run>/`。
 
 ```bash
-/gray/LAB/envs/AIO/bin/python -m pytest -q
-GRAPHMAP_HM3D_ROOT=/R/Datasets/3DGS/hm3dv2 /gray/LAB/envs/AIO/bin/python -m pytest -q
-/gray/LAB/envs/AIO/bin/python scripts/run_notebooks.py
-/gray/LAB/envs/AIO/bin/python scripts/run_notebooks.py --with-hm3d
-/gray/LAB/envs/AIO/bin/python scripts/run_notebooks.py --with-hm3d --notebook '04_*.ipynb' --output-dir examples/outputs/hm3dv2_mapping/executed
-/gray/LAB/envs/AIO/bin/python scripts/run_notebooks.py --with-hm3d --notebook '05_*.ipynb' --output-dir examples/outputs/ground_navigation/executed
+python -m pytest -q
+GRAPHMAP_HM3D_ROOT=path/to/hm3dv2 python -m pytest -q
+python scripts/run_notebooks.py
+python scripts/run_notebooks.py --with-hm3d
+python scripts/run_notebooks.py --with-hm3d --notebook '04_*.ipynb' --output-dir examples/outputs/hm3dv2_mapping/executed
+python scripts/run_notebooks.py --with-hm3d --notebook '05_*.ipynb' --output-dir examples/outputs/ground_navigation/executed
 ```
 
 普通测试不要求真实数据；设置数据集环境变量后才执行集成用例。Notebook 执行器使用启动它的 Python，结果写入临时目录或指定 `--output-dir`，不覆盖源 notebook。

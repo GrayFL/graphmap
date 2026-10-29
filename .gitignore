@@ -8,5 +8,6 @@ build/
 dist/
 examples/assets/
 examples/outputs/
+assets/
 
 PROJECT.md
