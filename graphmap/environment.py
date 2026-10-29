@@ -122,11 +122,13 @@ class Environment:
         objects. Temporary point keys are local row indices into
         ``points_world``. Only rows that survive global merge/dedup are merged
         into the environment tables.
+
+        ``timestamp`` is session-relative seconds (a scalar or one per point),
+        stored as signed int32 milliseconds. Runtime callers must subtract a
+        session origin and use a separate map after reset/seek. Non-finite or
+        out-of-range timestamps are rejected before updating the map.
         """
         del kwds
-        self.pose = pose_robot
-        self._frame_count += 1
-
         points_world = np.asarray(points_world, dtype=np.float32)
         if points_world.ndim != 2 or points_world.shape[1] != 3:
             raise ValueError(
@@ -134,6 +136,9 @@ class Environment:
                 )
 
         M = points_world.shape[0]
+        timestamps_ms = self._timestamps_for_observation(timestamp, M)
+        self.pose = pose_robot
+        self._frame_count += 1
         if M == 0:
             if self.enable_2d_map and update_2d:
                 self._update_2d_map(points_world)
@@ -144,7 +149,6 @@ class Environment:
             np.asarray(points_floor, dtype=np.float32).reshape(-1, 3)
             )
 
-        timestamps_ms = self._timestamps_for_observation(timestamp, M)
         colors_arr = self._colors_for_observation(colors, M)
 
         legacy_zero = np.zeros(M, dtype=np.uint32)
@@ -302,17 +306,27 @@ class Environment:
         count: int,
         ) -> np.ndarray:
         if timestamp is None:
-            now_ms = int((_time.time() - self._start_time) * 1000)
-            return np.full(count, now_ms, dtype=np.int32)
-        if isinstance(timestamp, (float, int, np.floating, np.integer)):
-            timestamp_ms = int(float(timestamp) * 1000)
-            return np.full(count, timestamp_ms, dtype=np.int32)
-        timestamps = np.asarray(timestamp, dtype=np.float64).reshape(-1)
-        if len(timestamps) != count:
+            timestamp = _time.time() - self._start_time
+        timestamps = np.asarray(timestamp, dtype=np.float64)
+        scalar = timestamps.ndim == 0
+        timestamps = timestamps.reshape(-1)
+        if not scalar and len(timestamps) != count:
             raise ValueError(
                 f"timestamp array length {len(timestamps)} != point count {count}"
                 )
-        return (timestamps * 1000).astype(np.int32)
+        with np.errstate(over="ignore", invalid="ignore"):
+            milliseconds = np.trunc(timestamps * 1000)
+        limits = np.iinfo(np.int32)
+        if (not np.all(np.isfinite(milliseconds)) or
+                np.any(milliseconds < limits.min) or
+                np.any(milliseconds > limits.max)):
+            raise ValueError(
+                "timestamp must be finite session-relative seconds fitting "
+                "int32 milliseconds; subtract the session origin before observe()"
+                )
+        if scalar:
+            return np.full(count, int(milliseconds[0]), dtype=np.int32)
+        return milliseconds.astype(np.int32)
 
     def _colors_for_observation(
         self,
