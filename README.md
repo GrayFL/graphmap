@@ -45,6 +45,8 @@ dataset_wrapper 是数据示例的可选依赖；graphmap 的几何、数组适�
 
 RSim 或其他运行时在调用边界以 `(stamp_ns - origin_ns) / 1e9` 转换数据源时间；应先做整数减法再转秒。reset/seek 后为新的 episode 创建独立 `Environment`，不要把回退后的时间混入旧地图。`observe` 会拒绝非有限时间及超出 int32 毫秒范围的时间，保留已有的向零截断毫秒语义。graphmap 不依赖 RSim、pyrobo 或 MuJoCo，也不管理运行时的时钟和命令期限。
 
+不要先把 Unix 纳秒转换为浮点数再相减：这会丢失低位精度，甚至改变毫秒截断边界处的结果。
+
 ## 1. 位姿、外参与批量点云
 
 ```python
@@ -150,6 +152,8 @@ env.observe(**observation)
 - `env.index_db("semantic_id")`：键是世界坐标与地图分辨率生成的 **uint64 体素键**，与数组当前行号无关。
 
 环境按最近时间戳保留体素代表点；时间相同保留后来的点，并将胜出点的属性关联到体素键。多点共享同一属性值时只保存一份属性内容。查询使用 `env.get_index_values(name)` 或 `env.point_keys()`，不要把 `InfoPoints.index` 当作新的语义键，它是旧格式保留列。
+
+体素键只描述几何，不包含运行会话：新旧 `Environment` 的同一体素会产生相同的键。跨会话缓存还须使用调用方的 session 和 map revision；不能仅凭体素键相同就复用旧会话的语义数据。
 
 旧 rsim RGB + LiDAR 流程仍可使用 `from graphmap.sensor import SensorBridge` 和 `SensorBridge.from_rsim_config(config)`。配置中的相机需提供 `width,height,fx,fy,ppx,ppy`。历史参数 `extrinsic_body_to_camera` 实际保存 **相机在 body 中的位姿** `T_body_camera`，作用方向为 camera → body。
 

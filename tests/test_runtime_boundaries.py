@@ -51,6 +51,47 @@ def test_native_nanosecond_origin_and_episode_are_callers_responsibility():
     assert_array_equal(first.infopoints.timestamp_ms, [1250])
 
 
+def test_integer_nanosecond_origin_preserves_millisecond_truncation_boundaries():
+    # Float conversion before subtraction loses sub-microsecond information at
+    # Unix-sized origins, which can change the stored millisecond at a boundary.
+    origin_ns = 1_793_275_200_000_000_003
+    offsets_ns = np.array([999_999, 1_000_000, 1_000_001, 1_999_999, 2_000_001], dtype=np.int64)
+    source_ns = origin_ns + offsets_ns
+    relative_seconds = (source_ns - origin_ns) / 1e9
+    environment = Environment(resolution=.1)
+    environment.observe(**pointcloud_observation(
+        [[float(index + 1), 0, 0] for index in range(len(offsets_ns))],
+        pose_sensor=Pose(), timestamp=relative_seconds,
+    ))
+    assert_array_equal(environment.infopoints.timestamp_ms, [0, 1, 1, 1, 2])
+
+
+def test_reset_map_session_does_not_reuse_point_semantics_or_mutable_snapshot():
+    previous = Environment(resolution=.1)
+    previous.observe(**pointcloud_observation(
+        [[1., 0, 0]], pose_sensor=Pose(), timestamp=12.,
+        attributes={'semantic_id': [17]},
+    ))
+    old_snapshot = previous.infopoints.copy()
+    current = Environment(resolution=.1)
+    current.observe(**pointcloud_observation(
+        [[1.01, 0, 0]], pose_sensor=Pose(), timestamp=0.,
+        attributes={'semantic_id': [23]},
+    ))
+    # Point keys describe geometry, not session identity. The upstream owner
+    # must replace the Environment; graphmap must not infer a runtime epoch.
+    assert_array_equal(previous.point_keys(), current.point_keys())
+    assert previous.get_index_values('semantic_id') == [17]
+    assert current.get_index_values('semantic_id') == [23]
+    assert_array_equal(old_snapshot.timestamp_ms, [12_000])
+    assert_array_equal(current.infopoints.timestamp_ms, [0])
+    assert not np.shares_memory(old_snapshot.data, previous.infopoints.data)
+    assert not np.shares_memory(old_snapshot.data, current.infopoints.data)
+    current.infopoints.xyz[:] = 99
+    assert_allclose(previous.infopoints.xyz, [[1., 0, 0]])
+    assert_allclose(old_snapshot.xyz, [[1., 0, 0]])
+
+
 @pytest.mark.parametrize('timestamp', [
     float('nan'), float('inf'), -float('inf'), 1_793_275_200,
     [float('nan')], [float('inf')], [1_793_275_200],
